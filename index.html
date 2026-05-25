@@ -186,6 +186,7 @@ const SLOTS = [
   { label: 'Mugshot',        color: '#38bdf8', hint: 'Draw the mugshot region'        },
   { label: 'Rank Name',      color: '#fbbf24', hint: 'Draw the rank name region'      },
   { label: 'Character Name', color: '#4ade80', hint: 'Draw the character name region' },
+  { label: 'Badge Number',   color: '#f472b6', hint: 'Draw the badge number region'   },
 ];
 
 // ── Elements ──────────────────────────────────────────────────────
@@ -244,7 +245,7 @@ SLOTS.forEach((slot, i) => {
 let loaded     = false;
 let activeSlot = 0;
 let dragging   = false;
-let selections = [null, null, null];   // { x, y, w, h } in canvas px, or null
+let selections = [null, null, null, null];   // { x, y, w, h } in canvas px, or null
 let dashOff    = 0;
 let raf        = null;
 
@@ -274,7 +275,7 @@ function loadFile(file) {
     uploadArea.style.display = 'none';
     workspace.style.display  = 'flex';
     loaded     = true;
-    selections = [null, null, null];
+    selections = [null, null, null, null];
     SLOTS.forEach((_, i) => setOutput(i, null));
     slotBtns.forEach(b => b.classList.remove('has-sel'));
     setActiveSlot(0);
@@ -286,7 +287,7 @@ function loadFile(file) {
 resetBtn.addEventListener('click', () => {
   stopLoop();
   loaded = false;
-  selections = [null, null, null];
+  selections = [null, null, null, null];
   workspace.style.display  = 'none';
   uploadArea.style.display = '';
   imgEl.src = '';
@@ -310,6 +311,7 @@ document.addEventListener('keydown', e => {
   if (e.key === '1') setActiveSlot(0);
   if (e.key === '2') setActiveSlot(1);
   if (e.key === '3') setActiveSlot(2);
+  if (e.key === '4') setActiveSlot(3);
 });
 
 // ── Pointer helpers ───────────────────────────────────────────────
