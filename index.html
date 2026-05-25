@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSS Position Tool</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0d0d0d;
+      color: #ccc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 16px 56px;
+      gap: 20px;
+    }
+
+    h1 { font-size: 1rem; font-weight: 600; color: #fff; letter-spacing: -0.01em; }
+
+    /* ── Upload ──────────────────────────────────────── */
+    #upload-area {
+      border: 2px dashed #242424;
+      border-radius: 14px;
+      padding: 52px 80px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      width: 100%;
+      max-width: 600px;
+    }
+    #upload-area:hover, #upload-area.over { border-color: #3a3a3a; background: rgba(255,255,255,0.015); }
+    #upload-area .icon { font-size: 2.5rem; margin-bottom: 10px; }
+    #upload-area p { color: #555; font-size: 0.88rem; }
+
+    /* ── Workspace ───────────────────────────────────── */
+    #workspace { display: none; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
+
+    /* ── Slot selector ───────────────────────────────── */
+    #slot-selector { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+    .slot-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 14px;
+      background: #151515;
+      border: 1px solid #222;
+      border-radius: 8px;
+      color: #555;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-family: inherit;
+      transition: all 0.12s;
+    }
+    .slot-btn:hover { background: #1a1a1a; color: #999; }
+    .slot-btn.active { background: #1c1c1c; border-color: var(--c); color: #ddd; }
+    .slot-btn .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--c);
+      opacity: 0.3;
+      transition: opacity 0.15s, box-shadow 0.15s;
+    }
+    .slot-btn.has-sel .dot { opacity: 1; box-shadow: 0 0 6px var(--c); }
+    .slot-btn .num { font-size: 0.68rem; color: #2e2e2e; margin-left: 1px; }
+    .slot-btn.active .num { color: #555; }
+
+    /* ── Image + canvas ──────────────────────────────── */
+    #image-container { position: relative; display: inline-block; line-height: 0; }
+
+    #preview-img {
+      display: block;
+      max-width: min(calc(100vw - 32px), 1100px);
+      max-height: 65vh;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    #overlay { position: absolute; top: 0; left: 0; cursor: crosshair; }
+
+    /* ── Output panels ───────────────────────────────── */
+    #outputs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: 100%;
+      max-width: 900px;
+    }
+    @media (max-width: 640px) { #outputs { grid-template-columns: 1fr; } }
+
+    .output-panel {
+      background: #121212;
+      border: 1px solid #1e1e1e;
+      border-radius: 10px;
+      overflow: hidden;
+      transition: box-shadow 0.15s;
+    }
+    .output-panel.active-panel { box-shadow: 0 0 0 1.5px var(--c); }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      border-bottom: 1px solid #1e1e1e;
+      gap: 8px;
+    }
+    .panel-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      color: #444;
+      white-space: nowrap;
+    }
+    .panel-label .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+
+    .copy-btn {
+      padding: 3px 10px;
+      background: #181818;
+      border: 1px solid #282828;
+      border-radius: 5px;
+      color: #666;
+      cursor: pointer;
+      font-size: 0.73rem;
+      font-family: inherit;
+      transition: all 0.12s;
+      white-space: nowrap;
+    }
+    .copy-btn:hover { background: #1f1f1f; border-color: #383838; color: #bbb; }
+    .copy-btn.ok { border-color: var(--c); color: var(--c); }
+
+    .css-output {
+      padding: 12px 14px;
+      font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 0.78rem;
+      line-height: 1.95;
+      color: #2e2e2e;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .css-output.has-value { color: #86efac; }
+
+    #reset-btn {
+      padding: 5px 14px;
+      background: transparent;
+      border: 1px solid #1a1a1a;
+      border-radius: 6px;
+      color: #333;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-family: inherit;
+      transition: all 0.12s;
+    }
+    #reset-btn:hover { border-color: #2e2e2e; color: #888; }
+  </style>
+</head>
+<body>
+
+<h1>CSS Position Tool</h1>
+
+<div id="upload-area">
+  <input type="file" id="file-input" accept="image/*" style="display:none">
+  <div class="icon">🖼</div>
+  <p>Click to upload or drag an image here</p>
+</div>
+
+<div id="workspace">
+  <div id="slot-selector"></div>
+  <div id="image-container">
+    <img id="preview-img" draggable="false" alt="">
+    <canvas id="overlay"></canvas>
+  </div>
+  <div id="outputs"></div>
+  <button id="reset-btn">↑ Upload different image</button>
+</div>
+
+<script>
+// ── Slot config ───────────────────────────────────────────────────
+const SLOTS = [
+  { label: 'Mugshot',        color: '#38bdf8', hint: 'Draw the mugshot region'        },
+  { label: 'Rank Name',      color: '#fbbf24', hint: 'Draw the rank name region'      },
+  { label: 'Character Name', color: '#4ade80', hint: 'Draw the character name region' },
+];
+
+// ── Elements ──────────────────────────────────────────────────────
+const uploadArea   = document.getElementById('upload-area');
+const fileInput    = document.getElementById('file-input');
+const workspace    = document.getElementById('workspace');
+const imgEl        = document.getElementById('preview-img');
+const canvas       = document.getElementById('overlay');
+const ctx          = canvas.getContext('2d');
+const slotSelector = document.getElementById('slot-selector');
+const outputsEl    = document.getElementById('outputs');
+const resetBtn     = document.getElementById('reset-btn');
+
+// ── Build slot UI dynamically ─────────────────────────────────────
+const slotBtns     = [];
+const outputPanels = [];
+const cssOutputEls = [];
+
+SLOTS.forEach((slot, i) => {
+  // Slot button
+  const btn = document.createElement('button');
+  btn.className = 'slot-btn';
+  btn.style.setProperty('--c', slot.color);
+  btn.innerHTML = `<span class="dot"></span>${slot.label}<span class="num">${i + 1}</span>`;
+  btn.addEventListener('click', () => setActiveSlot(i));
+  slotSelector.appendChild(btn);
+  slotBtns.push(btn);
+
+  // Output panel
+  const panel = document.createElement('div');
+  panel.className = 'output-panel';
+  panel.style.setProperty('--c', slot.color);
+  panel.innerHTML = `
+    <div class="panel-header">
+      <span class="panel-label"><span class="dot"></span>${slot.label}</span>
+      <button class="copy-btn">Copy</button>
+    </div>
+    <pre class="css-output">${slot.hint}</pre>`;
+  outputsEl.appendChild(panel);
+  outputPanels.push(panel);
+  cssOutputEls.push(panel.querySelector('.css-output'));
+
+  panel.querySelector('.copy-btn').addEventListener('click', () => {
+    const out = cssOutputEls[i];
+    if (!out.classList.contains('has-value')) return;
+    const btn = panel.querySelector('.copy-btn');
+    navigator.clipboard.writeText(out.textContent).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('ok');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 1500);
+    });
+  });
+});
+
+// ── State ─────────────────────────────────────────────────────────
+let loaded     = false;
+let activeSlot = 0;
+let dragging   = false;
+let selections = [null, null, null];   // { x, y, w, h } in canvas px, or null
+let dashOff    = 0;
+let raf        = null;
+
+setActiveSlot(0);
+
+function setActiveSlot(i) {
+  activeSlot = i;
+  slotBtns.forEach((b, j)     => b.classList.toggle('active',       j === i));
+  outputPanels.forEach((p, j) => p.classList.toggle('active-panel', j === i));
+}
+
+// ── Upload ────────────────────────────────────────────────────────
+uploadArea.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => e.target.files[0] && loadFile(e.target.files[0]));
+uploadArea.addEventListener('dragover',  e => { e.preventDefault(); uploadArea.classList.add('over'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('over'));
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadFile(f);
+});
+
+function loadFile(file) {
+  const url = URL.createObjectURL(file);
+  imgEl.onload = () => {
+    uploadArea.style.display = 'none';
+    workspace.style.display  = 'flex';
+    loaded     = true;
+    selections = [null, null, null];
+    SLOTS.forEach((_, i) => setOutput(i, null));
+    slotBtns.forEach(b => b.classList.remove('has-sel'));
+    setActiveSlot(0);
+    requestAnimationFrame(() => { syncCanvas(); startLoop(); });
+  };
+  imgEl.src = url;
+}
+
+resetBtn.addEventListener('click', () => {
+  stopLoop();
+  loaded = false;
+  selections = [null, null, null];
+  workspace.style.display  = 'none';
+  uploadArea.style.display = '';
+  imgEl.src = '';
+  fileInput.value = '';
+});
+
+// ── Canvas sizing ─────────────────────────────────────────────────
+function syncCanvas() {
+  const r = imgEl.getBoundingClientRect();
+  canvas.width        = Math.round(r.width);
+  canvas.height       = Math.round(r.height);
+  canvas.style.width  = canvas.width  + 'px';
+  canvas.style.height = canvas.height + 'px';
+}
+
+window.addEventListener('resize', () => { if (loaded) syncCanvas(); });
+
+// ── Keyboard shortcuts: 1 2 3 ─────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (!loaded || e.target.tagName === 'INPUT') return;
+  if (e.key === '1') setActiveSlot(0);
+  if (e.key === '2') setActiveSlot(1);
+  if (e.key === '3') setActiveSlot(2);
+});
+
+// ── Pointer helpers ───────────────────────────────────────────────
+function getPos(e) {
+  const r   = canvas.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return {
+    x: Math.max(0, Math.min(src.clientX - r.left, r.width)),
+    y: Math.max(0, Math.min(src.clientY - r.top,  r.height)),
+  };
+}
+
+// ── Drag events ───────────────────────────────────────────────────
+canvas.addEventListener('mousedown',  onStart);
+canvas.addEventListener('touchstart', onStart, { passive: false });
+document.addEventListener('mousemove',  onMove);
+document.addEventListener('touchmove',  onMove, { passive: false });
+document.addEventListener('mouseup',    onEnd);
+document.addEventListener('touchend',   onEnd);
+
+function onStart(e) {
+  if (e.type === 'touchstart') e.preventDefault();
+  const p = getPos(e);
+  dragging = true;
+  selections[activeSlot] = { x: p.x, y: p.y, w: 0, h: 0 };
+  setOutput(activeSlot, null);
+  slotBtns[activeSlot].classList.remove('has-sel');
+}
+
+function onMove(e) {
+  if (!dragging) return;
+  if (e.type === 'touchmove') e.preventDefault();
+  const p = getPos(e);
+  const s = selections[activeSlot];
+  s.w = p.x - s.x;
+  s.h = p.y - s.y;
+}
+
+function onEnd() {
+  if (!dragging) return;
+  dragging = false;
+
+  let { x, y, w, h } = selections[activeSlot];
+  if (w < 0) { x += w; w = -w; }
+  if (h < 0) { y += h; h = -h; }
+  selections[activeSlot] = { x, y, w, h };
+
+  if (w < 4 || h < 4) {
+    selections[activeSlot] = null;
+    setOutput(activeSlot, null);
+    return;
+  }
+
+  const scaleX = imgEl.naturalWidth  / canvas.width;
+  const scaleY = imgEl.naturalHeight / canvas.height;
+
+  slotBtns[activeSlot].classList.add('has-sel');
+  setOutput(activeSlot, {
+    left:   Math.round(x * scaleX),
+    top:    Math.round(y * scaleY),
+    width:  Math.round(w * scaleX),
+    height: Math.round(h * scaleY),
+  });
+
+  // Auto-advance to next empty slot
+  const next = SLOTS.findIndex((_, i) => i > activeSlot && !selections[i]);
+  if (next !== -1) setActiveSlot(next);
+}
+
+// ── Output text ───────────────────────────────────────────────────
+function setOutput(i, v) {
+  const el = cssOutputEls[i];
+  if (!v) {
+    el.textContent = SLOTS[i].hint;
+    el.classList.remove('has-value');
+    return;
+  }
+  el.textContent =
+`position: relative;
+top: ${v.top}px;
+left: ${v.left}px;
+width: ${v.width}px;
+height: ${v.height}px;
+object-fit: cover;`;
+  el.classList.add('has-value');
+}
+
+// ── Render loop ───────────────────────────────────────────────────
+function startLoop() {
+  if (raf) return;
+  (function tick() { render(); raf = requestAnimationFrame(tick); })();
+}
+function stopLoop() {
+  if (raf) { cancelAnimationFrame(raf); raf = null; }
+}
+
+function normSel(s) {
+  if (!s) return null;
+  return {
+    rx: s.w >= 0 ? s.x : s.x + s.w,
+    ry: s.h >= 0 ? s.y : s.y + s.h,
+    rw: Math.abs(s.w),
+    rh: Math.abs(s.h),
+  };
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!selections.some(Boolean)) return;
+
+  // Single dim pass; cut out every selected region so they all stay bright
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  SLOTS.forEach((_, i) => {
+    const n = normSel(selections[i]);
+    if (n && n.rw > 0 && n.rh > 0) ctx.clearRect(n.rx, n.ry, n.rw, n.rh);
+  });
+
+  dashOff = (dashOff + 0.4) % 12;
+
+  SLOTS.forEach((slot, i) => {
+    const n = normSel(selections[i]);
+    if (!n || n.rw < 1 || n.rh < 1) return;
+    const { rx, ry, rw, rh } = n;
+
+    if (i === activeSlot) {
+      // Tinted fill
+      ctx.fillStyle = hexAlpha(slot.color, 0.07);
+      ctx.fillRect(rx, ry, rw, rh);
+
+      // Marching ants
+      ctx.save();
+      ctx.setLineDash([6, 6]);
+      ctx.lineDashOffset = -dashOff;
+      ctx.strokeStyle = slot.color;
+      ctx.lineWidth   = 1.5;
+      ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+      ctx.restore();
+
+      // Dimension label while dragging
+      if (dragging) {
+        const sx = imgEl.naturalWidth  / canvas.width;
+        const sy = imgEl.naturalHeight / canvas.height;
+        drawSizeLabel(`${Math.round(rw * sx)} × ${Math.round(rh * sy)} px`, rx, ry, rw, rh);
+      }
+    } else {
+      // Inactive: faint solid border
+      ctx.save();
+      ctx.strokeStyle = slot.color;
+      ctx.lineWidth   = 1.5;
+      ctx.globalAlpha = 0.5;
+      ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+      ctx.restore();
+
+      // Name tag in corner
+      drawNameTag(slot.label, slot.color, rx, ry);
+    }
+  });
+}
+
+// ── Canvas label helpers ──────────────────────────────────────────
+function hexAlpha(hex, a) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y,      x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h,  x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h,      x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y,          x + r, y);
+  ctx.closePath();
+}
+
+function drawSizeLabel(text, rx, ry, rw, rh) {
+  ctx.font = '11px system-ui, -apple-system, sans-serif';
+  const pad = 8, bh = 22, r = 4;
+  const bw  = ctx.measureText(text).width + pad * 2;
+  let lx = rx + rw / 2 - bw / 2;
+  let ly = ry - bh - 7;
+  if (ly < 4) ly = ry + rh + 7;
+  lx = Math.max(4, Math.min(canvas.width - bw - 4, lx));
+
+  ctx.fillStyle = 'rgba(10,10,10,0.88)';
+  roundRect(lx, ly, bw, bh, r);
+  ctx.fill();
+
+  ctx.fillStyle    = '#e0e0e0';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign    = 'left';
+  ctx.fillText(text, lx + pad, ly + bh / 2);
+}
+
+function drawNameTag(text, color, rx, ry) {
+  ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+  const pad = 6, bh = 18, r = 3;
+  const bw  = ctx.measureText(text).width + pad * 2;
+  const lx  = rx + 4;
+  const ly  = ry + 4;
+
+  ctx.fillStyle = hexAlpha(color, 0.18);
+  roundRect(lx, ly, bw, bh, r);
+  ctx.fill();
+
+  ctx.save();
+  ctx.fillStyle    = color;
+  ctx.globalAlpha  = 0.85;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign    = 'left';
+  ctx.fillText(text, lx + pad, ly + bh / 2);
+  ctx.restore();
+}
+</script>
+</body>
+</html>
