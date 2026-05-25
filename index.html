@@ -390,7 +390,8 @@ function setOutput(i, v) {
     return;
   }
   el.textContent =
-`position: relative;
+`/* ${SLOTS[i].label} */
+position: relative;
 top: ${v.top}px;
 left: ${v.left}px;
 width: ${v.width}px;
