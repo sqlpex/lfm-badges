@@ -467,7 +467,10 @@ function parseCSSText(text) {
 // ── Render loop ───────────────────────────────────────────────────
 function startLoop() {
   if (raf) return;
-  (function tick() { render(); raf = requestAnimationFrame(tick); })();
+  (function tick() {
+    try { render(); } catch (e) { console.error('render:', e); }
+    raf = requestAnimationFrame(tick);
+  })();
 }
 function stopLoop() {
   if (raf) { cancelAnimationFrame(raf); raf = null; }
@@ -491,21 +494,28 @@ function render() {
   ctx.fillStyle = 'rgba(0,0,0,0.42)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // Rectangles: clearRect punches transparent holes in the dim
   SLOTS.forEach((_, i) => {
+    if (i === 0 && mugShape === 'circle') return;
     const n = normSel(selections[i]);
     if (!n || n.rw < 1 || n.rh < 1) return;
-    if (i === 0 && mugShape === 'circle') {
-      // Clip to the circle arc, then clearRect — only the circle pixels get cleared
+    ctx.clearRect(n.rx, n.ry, n.rw, n.rh);
+  });
+
+  // Circle (mugshot): destination-out compositing — the only reliable way
+  // to punch a non-rectangular hole; clearRect ignores ctx.clip() per spec
+  if (mugShape === 'circle') {
+    const n = normSel(selections[0]);
+    if (n && n.rw >= 1 && n.rh >= 1) {
       ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,1)';
       ctx.beginPath();
       ctx.arc(n.rx + n.rw / 2, n.ry + n.rh / 2, n.rw / 2, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.clearRect(n.rx, n.ry, n.rw, n.rh);
+      ctx.fill();
       ctx.restore();
-    } else {
-      ctx.clearRect(n.rx, n.ry, n.rw, n.rh);
     }
-  });
+  }
 
   // ── Borders / fills ───────────────────────────────────────────
   dashOff = (dashOff + 0.4) % 12;
