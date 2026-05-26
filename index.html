@@ -69,6 +69,21 @@
     .slot-btn .num { font-size: 0.68rem; color: #2e2e2e; margin-left: 1px; }
     .slot-btn.active .num { color: #555; }
 
+    /* ── Shape toggle ────────────────────────────────── */
+    #shape-row { display: none; align-items: center; gap: 8px; font-size: 0.76rem; color: #444; }
+    #shape-row.visible { display: flex; }
+    .shape-toggle { display: flex; gap: 2px; background: #141414; border: 1px solid #222; border-radius: 7px; padding: 2px; }
+    .shape-opt {
+      display: flex; align-items: center; gap: 5px;
+      padding: 4px 12px;
+      border: none; border-radius: 5px;
+      background: transparent; color: #555;
+      cursor: pointer; font-size: 0.78rem; font-family: inherit;
+      transition: all 0.12s;
+    }
+    .shape-opt:hover { color: #999; }
+    .shape-opt.active { background: #222; color: #ddd; }
+
     /* ── Image + canvas ──────────────────────────────── */
     #image-container { position: relative; display: inline-block; line-height: 0; }
 
@@ -86,12 +101,13 @@
     /* ── Output panels ───────────────────────────────── */
     #outputs {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       width: 100%;
-      max-width: 900px;
+      max-width: 1000px;
     }
-    @media (max-width: 640px) { #outputs { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) { #outputs { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 420px) { #outputs { grid-template-columns: 1fr; } }
 
     .output-panel {
       background: #121212;
@@ -111,50 +127,44 @@
       gap: 8px;
     }
     .panel-label {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.72rem;
-      color: #444;
-      white-space: nowrap;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; color: #444; white-space: nowrap;
     }
     .panel-label .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
 
     .copy-btn {
       padding: 3px 10px;
-      background: #181818;
-      border: 1px solid #282828;
-      border-radius: 5px;
-      color: #666;
-      cursor: pointer;
-      font-size: 0.73rem;
-      font-family: inherit;
-      transition: all 0.12s;
-      white-space: nowrap;
+      background: #181818; border: 1px solid #282828; border-radius: 5px;
+      color: #666; cursor: pointer; font-size: 0.73rem; font-family: inherit;
+      transition: all 0.12s; white-space: nowrap;
     }
     .copy-btn:hover { background: #1f1f1f; border-color: #383838; color: #bbb; }
     .copy-btn.ok { border-color: var(--c); color: var(--c); }
 
+    /* textarea replaces <pre> — inherits same look, but editable */
     .css-output {
+      display: block;
+      width: 100%;
       padding: 12px 14px;
       font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
       font-size: 0.78rem;
       line-height: 1.95;
-      color: #2e2e2e;
+      color: #383838;
       white-space: pre;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
       overflow-x: auto;
+      overflow-y: hidden;
     }
     .css-output.has-value { color: #86efac; }
+    .css-output:focus.has-value { color: #a5f3c0; }
 
     #reset-btn {
       padding: 5px 14px;
-      background: transparent;
-      border: 1px solid #1a1a1a;
-      border-radius: 6px;
-      color: #333;
-      cursor: pointer;
-      font-size: 0.78rem;
-      font-family: inherit;
+      background: transparent; border: 1px solid #1a1a1a; border-radius: 6px;
+      color: #333; cursor: pointer; font-size: 0.78rem; font-family: inherit;
       transition: all 0.12s;
     }
     #reset-btn:hover { border-color: #2e2e2e; color: #888; }
@@ -172,6 +182,13 @@
 
 <div id="workspace">
   <div id="slot-selector"></div>
+  <div id="shape-row">
+    <span>Shape:</span>
+    <div class="shape-toggle">
+      <button class="shape-opt active" data-shape="rect">▭ Rectangle</button>
+      <button class="shape-opt"        data-shape="circle">○ Circle</button>
+    </div>
+  </div>
   <div id="image-container">
     <img id="preview-img" draggable="false" alt="">
     <canvas id="overlay"></canvas>
@@ -199,6 +216,8 @@ const ctx          = canvas.getContext('2d');
 const slotSelector = document.getElementById('slot-selector');
 const outputsEl    = document.getElementById('outputs');
 const resetBtn     = document.getElementById('reset-btn');
+const shapeRow     = document.getElementById('shape-row');
+const shapeOpts    = document.querySelectorAll('.shape-opt');
 
 // ── Build slot UI dynamically ─────────────────────────────────────
 const slotBtns     = [];
@@ -215,7 +234,7 @@ SLOTS.forEach((slot, i) => {
   slotSelector.appendChild(btn);
   slotBtns.push(btn);
 
-  // Output panel
+  // Output panel with editable textarea
   const panel = document.createElement('div');
   panel.className = 'output-panel';
   panel.style.setProperty('--c', slot.color);
@@ -224,20 +243,39 @@ SLOTS.forEach((slot, i) => {
       <span class="panel-label"><span class="dot"></span>${slot.label}</span>
       <button class="copy-btn">Copy</button>
     </div>
-    <pre class="css-output">${slot.hint}</pre>`;
+    <textarea class="css-output" rows="2" spellcheck="false" autocomplete="off">${slot.hint}</textarea>`;
   outputsEl.appendChild(panel);
   outputPanels.push(panel);
-  cssOutputEls.push(panel.querySelector('.css-output'));
 
+  const ta = panel.querySelector('.css-output');
+  cssOutputEls.push(ta);
+
+  // Copy
   panel.querySelector('.copy-btn').addEventListener('click', () => {
-    const out = cssOutputEls[i];
-    if (!out.classList.contains('has-value')) return;
-    const btn = panel.querySelector('.copy-btn');
-    navigator.clipboard.writeText(out.textContent).then(() => {
-      btn.textContent = 'Copied!';
-      btn.classList.add('ok');
-      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 1500);
+    if (!ta.classList.contains('has-value')) return;
+    const copyBtn = panel.querySelector('.copy-btn');
+    navigator.clipboard.writeText(ta.value).then(() => {
+      copyBtn.textContent = 'Copied!';
+      copyBtn.classList.add('ok');
+      setTimeout(() => { copyBtn.textContent = 'Copy'; copyBtn.classList.remove('ok'); }, 1500);
     });
+  });
+
+  // Live edit: textarea → canvas
+  ta.addEventListener('input', () => {
+    if (!loaded) return;
+    const v = parseCSSText(ta.value);
+    if (!v) return;
+    const scaleX = imgEl.naturalWidth  / canvas.width;
+    const scaleY = imgEl.naturalHeight / canvas.height;
+    selections[i] = {
+      x: v.left   / scaleX,
+      y: v.top    / scaleY,
+      w: v.width  / scaleX,
+      h: v.height / scaleY,
+    };
+    slotBtns[i].classList.add('has-sel');
+    ta.classList.add('has-value');
   });
 });
 
@@ -245,9 +283,21 @@ SLOTS.forEach((slot, i) => {
 let loaded     = false;
 let activeSlot = 0;
 let dragging   = false;
-let selections = [null, null, null, null];   // { x, y, w, h } in canvas px, or null
+let selections = [null, null, null, null];
 let dashOff    = 0;
 let raf        = null;
+let mugShape   = 'rect';
+
+// ── Shape toggle ──────────────────────────────────────────────────
+shapeOpts.forEach(btn => {
+  btn.addEventListener('click', () => {
+    mugShape = btn.dataset.shape;
+    shapeOpts.forEach(b => b.classList.toggle('active', b === btn));
+    selections[0] = null;
+    setOutput(0, null);
+    slotBtns[0].classList.remove('has-sel');
+  });
+});
 
 setActiveSlot(0);
 
@@ -255,6 +305,7 @@ function setActiveSlot(i) {
   activeSlot = i;
   slotBtns.forEach((b, j)     => b.classList.toggle('active',       j === i));
   outputPanels.forEach((p, j) => p.classList.toggle('active-panel', j === i));
+  shapeRow.classList.toggle('visible', i === 0);
 }
 
 // ── Upload ────────────────────────────────────────────────────────
@@ -305,9 +356,9 @@ function syncCanvas() {
 
 window.addEventListener('resize', () => { if (loaded) syncCanvas(); });
 
-// ── Keyboard shortcuts: 1 2 3 ─────────────────────────────────────
+// ── Keyboard shortcuts ────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if (!loaded || e.target.tagName === 'INPUT') return;
+  if (!loaded || e.target.tagName === 'TEXTAREA') return;
   if (e.key === '1') setActiveSlot(0);
   if (e.key === '2') setActiveSlot(1);
   if (e.key === '3') setActiveSlot(2);
@@ -346,8 +397,15 @@ function onMove(e) {
   if (e.type === 'touchmove') e.preventDefault();
   const p = getPos(e);
   const s = selections[activeSlot];
-  s.w = p.x - s.x;
-  s.h = p.y - s.y;
+  let w = p.x - s.x;
+  let h = p.y - s.y;
+  if (activeSlot === 0 && mugShape === 'circle') {
+    const size = Math.min(Math.abs(w), Math.abs(h));
+    w = w < 0 ? -size : size;
+    h = h < 0 ? -size : size;
+  }
+  s.w = w;
+  s.h = h;
 }
 
 function onEnd() {
@@ -376,28 +434,34 @@ function onEnd() {
     height: Math.round(h * scaleY),
   });
 
-  // Auto-advance to next empty slot
   const next = SLOTS.findIndex((_, i) => i > activeSlot && !selections[i]);
   if (next !== -1) setActiveSlot(next);
 }
 
-// ── Output text ───────────────────────────────────────────────────
+// ── Output ────────────────────────────────────────────────────────
 function setOutput(i, v) {
   const el = cssOutputEls[i];
   if (!v) {
-    el.textContent = SLOTS[i].hint;
+    el.value = SLOTS[i].hint;
+    el.rows  = 2;
     el.classList.remove('has-value');
     return;
   }
-  el.textContent =
-`/* ${SLOTS[i].label} */
-position: relative;
-top: ${v.top}px;
-left: ${v.left}px;
-width: ${v.width}px;
-height: ${v.height}px;
-object-fit: cover;`;
+  const isCircle = i === 0 && mugShape === 'circle';
+  const lines = isCircle
+    ? [`/* ${SLOTS[i].label} */`, `position: relative;`, `top: ${v.top}px;`, `left: ${v.left}px;`, `width: ${v.width}px;`, `height: ${v.height}px;`, `border-radius: 50%;`, `object-fit: cover;`]
+    : [`/* ${SLOTS[i].label} */`, `position: relative;`, `top: ${v.top}px;`, `left: ${v.left}px;`, `width: ${v.width}px;`, `height: ${v.height}px;`, `object-fit: cover;`];
+  el.value = lines.join('\n');
+  el.rows  = lines.length;
   el.classList.add('has-value');
+}
+
+// ── CSS parser (for live textarea → canvas) ───────────────────────
+function parseCSSText(text) {
+  const get = key => parseInt(text.match(new RegExp(key + ':\\s*(\\d+)px'))?.[1]);
+  const top = get('top'), left = get('left'), width = get('width'), height = get('height');
+  if ([top, left, width, height].some(isNaN)) return null;
+  return { top, left, width, height };
 }
 
 // ── Render loop ───────────────────────────────────────────────────
@@ -423,57 +487,73 @@ function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!selections.some(Boolean)) return;
 
-  // Single dim pass; cut out every selected region so they all stay bright
+  // ── Dim pass ──────────────────────────────────────────────────
   ctx.fillStyle = 'rgba(0,0,0,0.42)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
   SLOTS.forEach((_, i) => {
     const n = normSel(selections[i]);
-    if (n && n.rw > 0 && n.rh > 0) ctx.clearRect(n.rx, n.ry, n.rw, n.rh);
+    if (!n || n.rw < 1 || n.rh < 1) return;
+    if (i === 0 && mugShape === 'circle') {
+      // Clip to the circle arc, then clearRect — only the circle pixels get cleared
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(n.rx + n.rw / 2, n.ry + n.rh / 2, n.rw / 2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.clearRect(n.rx, n.ry, n.rw, n.rh);
+      ctx.restore();
+    } else {
+      ctx.clearRect(n.rx, n.ry, n.rw, n.rh);
+    }
   });
 
+  // ── Borders / fills ───────────────────────────────────────────
   dashOff = (dashOff + 0.4) % 12;
 
   SLOTS.forEach((slot, i) => {
     const n = normSel(selections[i]);
     if (!n || n.rw < 1 || n.rh < 1) return;
     const { rx, ry, rw, rh } = n;
+    const isCircle = i === 0 && mugShape === 'circle';
+    const cx = rx + rw / 2, cy = ry + rh / 2, cr = rw / 2;
 
     if (i === activeSlot) {
-      // Tinted fill
+      // Subtle tinted fill
       ctx.fillStyle = hexAlpha(slot.color, 0.07);
-      ctx.fillRect(rx, ry, rw, rh);
+      if (isCircle) { ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill(); }
+      else          { ctx.fillRect(rx, ry, rw, rh); }
 
-      // Marching ants
+      // Marching ants border
       ctx.save();
       ctx.setLineDash([6, 6]);
       ctx.lineDashOffset = -dashOff;
       ctx.strokeStyle = slot.color;
       ctx.lineWidth   = 1.5;
-      ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+      if (isCircle) { ctx.beginPath(); ctx.arc(cx, cy, cr - 0.75, 0, Math.PI * 2); ctx.stroke(); }
+      else          { ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1); }
       ctx.restore();
 
-      // Dimension label while dragging
+      // Live size label while dragging
       if (dragging) {
         const sx = imgEl.naturalWidth  / canvas.width;
         const sy = imgEl.naturalHeight / canvas.height;
         drawSizeLabel(`${Math.round(rw * sx)} × ${Math.round(rh * sy)} px`, rx, ry, rw, rh);
       }
     } else {
-      // Inactive: faint solid border
+      // Inactive: faint solid border + name tag
       ctx.save();
       ctx.strokeStyle = slot.color;
       ctx.lineWidth   = 1.5;
       ctx.globalAlpha = 0.5;
-      ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+      if (isCircle) { ctx.beginPath(); ctx.arc(cx, cy, cr - 0.75, 0, Math.PI * 2); ctx.stroke(); }
+      else          { ctx.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1); }
       ctx.restore();
-
-      // Name tag in corner
       drawNameTag(slot.label, slot.color, rx, ry);
     }
   });
 }
 
-// ── Canvas label helpers ──────────────────────────────────────────
+// ── Canvas helpers ────────────────────────────────────────────────
 function hexAlpha(hex, a) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -485,13 +565,13 @@ function roundRect(x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y,      x + w, y + r);
+  ctx.quadraticCurveTo(x + w, y,     x + w, y + r);
   ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h,  x + w - r, y + h);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
   ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h,      x, y + h - r);
+  ctx.quadraticCurveTo(x, y + h,     x, y + h - r);
   ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y,          x + r, y);
+  ctx.quadraticCurveTo(x, y,         x + r, y);
   ctx.closePath();
 }
 
@@ -507,7 +587,6 @@ function drawSizeLabel(text, rx, ry, rw, rh) {
   ctx.fillStyle = 'rgba(10,10,10,0.88)';
   roundRect(lx, ly, bw, bh, r);
   ctx.fill();
-
   ctx.fillStyle    = '#e0e0e0';
   ctx.textBaseline = 'middle';
   ctx.textAlign    = 'left';
@@ -518,8 +597,7 @@ function drawNameTag(text, color, rx, ry) {
   ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
   const pad = 6, bh = 18, r = 3;
   const bw  = ctx.measureText(text).width + pad * 2;
-  const lx  = rx + 4;
-  const ly  = ry + 4;
+  const lx  = rx + 4, ly = ry + 4;
 
   ctx.fillStyle = hexAlpha(color, 0.18);
   roundRect(lx, ly, bw, bh, r);
